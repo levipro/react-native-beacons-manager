@@ -1,5 +1,12 @@
 package com.mackentoch.beaconsandroid;
 
+import android.app.ActivityManager;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.os.Build;
+
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
@@ -37,6 +44,7 @@ import java.util.Map;
 
 public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements BeaconConsumer {
   private static final String LOG_TAG = "BeaconsAndroidModule";
+  private static final String NOTIFICATION_CHANNEL_ID = "BeaconsAndroidModule";
   private static final int RUNNING_AVG_RSSI_FILTER = 0;
   private static final int ARMA_RSSI_FILTER = 1;
   private BeaconManager mBeaconManager;
@@ -55,6 +63,36 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
         this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
         // need to bind at instantiation so that service loads (to test more)
         mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24"));
+
+        // Fix: may not be called after consumers are already bound beacon
+        if (!mBeaconManager.isAnyConsumerBound()) {
+          Notification.Builder builder = new Notification.Builder(mApplicationContext);
+          builder.setSmallIcon(mApplicationContext.getResources().getIdentifier("ic_notification", "mipmap", mApplicationContext.getPackageName()));
+          builder.setContentTitle("Scanning for Assets");
+          Class intentClass = getMainActivityClass();
+          Intent intent = new Intent(mApplicationContext, intentClass);
+          PendingIntent pendingIntent = PendingIntent.getActivity(mApplicationContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+          builder.setContentIntent(pendingIntent);
+
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+              NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHANNEL_ID,
+                      "AssetTracker Asset Scanner", NotificationManager.IMPORTANCE_DEFAULT);
+              channel.setDescription("Scanning for Assets");
+              NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+              notificationManager.createNotificationChannel(channel);
+              builder.setChannelId(channel.getId());
+          }
+
+          mBeaconManager.enableForegroundServiceScanning(builder.build(), 456);
+          // For the above foreground scanning service to be useful, you need to disable
+          // JobScheduler-based scans (used on Android 8+) and set a fast background scan
+          // cycle that would otherwise be disallowed by the operating system.
+          //
+          mBeaconManager.setEnableScheduledScanJobs(false);
+          mBeaconManager.setBackgroundBetweenScanPeriod(0);
+          mBeaconManager.setBackgroundScanPeriod(1100);
+        }
+
         bindManager();
     }
 
@@ -427,4 +465,17 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
         minor.length() > 0 ? Identifier.parse(minor) : null
       );
   }
+
+  private Class getMainActivityClass() {
+      String packageName = mApplicationContext.getPackageName();
+      Intent launchIntent = mApplicationContext.getPackageManager().getLaunchIntentForPackage(packageName);
+      String className = launchIntent.getComponent().getClassName();
+      try {
+          return Class.forName(className);
+      } catch (ClassNotFoundException e) {
+          e.printStackTrace();
+          return null;
+      }
+  }
+
 }
