@@ -86,7 +86,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
               NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHANNEL_ID,
-                      "AssetTracker Asset Scanner", NotificationManager.IMPORTANCE_DEFAULT);
+                      "AssetTracker Asset Scanner", NotificationManager.IMPORTANCE_LOW);
               channel.setDescription("Scanning for Assets");
               NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
               notificationManager.createNotificationChannel(channel);
