@@ -18,6 +18,7 @@ import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
+import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.WritableArray;
@@ -42,11 +43,13 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements BeaconConsumer {
+public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements LifecycleEventListener, BeaconConsumer {
   private static final String LOG_TAG = "BeaconsAndroidModule";
   private static final String NOTIFICATION_CHANNEL_ID = "BeaconsAndroidModule";
   private static final int RUNNING_AVG_RSSI_FILTER = 0;
   private static final int ARMA_RSSI_FILTER = 1;
+  private boolean firstSetupCompleted = false;
+  private boolean mInitialized = false;
   private BeaconManager mBeaconManager;
   private Context mApplicationContext;
   private ReactApplicationContext mReactContext;
@@ -55,19 +58,26 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
     super(reactContext);
     Log.d(LOG_TAG, "BeaconsAndroidModule - started");
     this.mReactContext = reactContext;
+    this.mReactContext.addLifecycleEventListener(this);
   }
 
     @Override
     public void initialize() {
-        this.mApplicationContext = this.mReactContext.getApplicationContext();
-        this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
-        // need to bind at instantiation so that service loads (to test more)
-        mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24"));
+    }
+
+    private void initializeBeaconModule() {
+        if (!firstSetupCompleted) {
+          this.mApplicationContext = this.mReactContext.getApplicationContext();
+          this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
+          // need to bind at instantiation so that service loads (to test more)
+          mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24"));
+          firstSetupCompleted = true;
+        }
 
         // Fix: may not be called after consumers are already bound beacon
         if (!mBeaconManager.isAnyConsumerBound()) {
           Notification.Builder builder = new Notification.Builder(mApplicationContext);
-          builder.setSmallIcon(mApplicationContext.getResources().getIdentifier("ic_notification", "mipmap", mApplicationContext.getPackageName()));
+          builder.setSmallIcon(mApplicationContext.getResources().getIdentifier("ic_launcher", "mipmap", mApplicationContext.getPackageName()));
           builder.setContentTitle("Scanning for Assets");
           Class intentClass = getMainActivityClass();
           Intent intent = new Intent(mApplicationContext, intentClass);
@@ -94,6 +104,36 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
         }
 
         bindManager();
+        mInitialized = true;
+    }
+
+    @Override
+    public void onHostResume() {
+        // Activity `onResume`
+        if (!mInitialized) {
+            initializeBeaconModule();
+        }
+    }
+
+    @Override
+    public void onHostPause() {
+        // Activity `onPause`
+    }
+
+    @Override
+    public void onHostDestroy() {
+      // Activity `onDestroy`
+      mInitialized = false;
+      unbindManager();
+      sendEvent(mReactContext, "beaconMonitorDestroyed", null);
+
+      // if (Build.VERSION.SDK_INT > 26) {
+      //   NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+      //   // notificationManager.cancel(mBeaconManager.getForegroundServiceNotificationId());
+      //   notificationManager.deleteNotificationChannel(NOTIFICATION_CHANNEL_ID);
+      // }
+
+      // mBeaconManager.disableForegroundServiceScanning();
     }
 
     @Override
