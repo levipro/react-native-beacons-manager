@@ -59,58 +59,53 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
     Log.d(LOG_TAG, "BeaconsAndroidModule - started");
     this.mReactContext = reactContext;
     this.mReactContext.addLifecycleEventListener(this);
+
+    this.mApplicationContext = this.mReactContext.getApplicationContext();
+    this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
+    // need to bind at instantiation so that service loads (to test more)
+    mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24"));
+
+    // Fix: may not be called after consumers are already bound beacon
+    if (!mBeaconManager.isAnyConsumerBound()) {
+      Notification.Builder builder = new Notification.Builder(mApplicationContext);
+      builder.setSmallIcon(mApplicationContext.getResources().getIdentifier("ic_launcher", "mipmap", mApplicationContext.getPackageName()));
+      builder.setContentTitle("Scanning for Assets");
+      Class intentClass = getMainActivityClass();
+      Intent intent = new Intent(mApplicationContext, intentClass);
+      PendingIntent pendingIntent = PendingIntent.getActivity(mApplicationContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+      builder.setContentIntent(pendingIntent);
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHANNEL_ID,
+                  "AssetTracker Asset Scanner", NotificationManager.IMPORTANCE_LOW);
+          channel.setDescription("Scanning for Assets");
+          NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+          notificationManager.createNotificationChannel(channel);
+          builder.setChannelId(channel.getId());
+      }
+
+      mBeaconManager.enableForegroundServiceScanning(builder.build(), 456);
+      // For the above foreground scanning service to be useful, you need to disable
+      // JobScheduler-based scans (used on Android 8+) and set a fast background scan
+      // cycle that would otherwise be disallowed by the operating system.
+      //
+      mBeaconManager.setEnableScheduledScanJobs(false);
+      mBeaconManager.setBackgroundBetweenScanPeriod(0);
+      mBeaconManager.setBackgroundScanPeriod(1100);
+    }
+    initializeBeaconModule();
+    firstSetupCompleted = true;
   }
 
-    @Override
-    public void initialize() {
-    }
-
-    private void initializeBeaconModule() {
-        if (!firstSetupCompleted) {
-          this.mApplicationContext = this.mReactContext.getApplicationContext();
-          this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
-          // need to bind at instantiation so that service loads (to test more)
-          mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24"));
-          firstSetupCompleted = true;
-        }
-
-        // Fix: may not be called after consumers are already bound beacon
-        if (!mBeaconManager.isAnyConsumerBound()) {
-          Notification.Builder builder = new Notification.Builder(mApplicationContext);
-          builder.setSmallIcon(mApplicationContext.getResources().getIdentifier("ic_launcher", "mipmap", mApplicationContext.getPackageName()));
-          builder.setContentTitle("Scanning for Assets");
-          Class intentClass = getMainActivityClass();
-          Intent intent = new Intent(mApplicationContext, intentClass);
-          PendingIntent pendingIntent = PendingIntent.getActivity(mApplicationContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-          builder.setContentIntent(pendingIntent);
-
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-              NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHANNEL_ID,
-                      "AssetTracker Asset Scanner", NotificationManager.IMPORTANCE_LOW);
-              channel.setDescription("Scanning for Assets");
-              NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
-              notificationManager.createNotificationChannel(channel);
-              builder.setChannelId(channel.getId());
-          }
-
-          mBeaconManager.enableForegroundServiceScanning(builder.build(), 456);
-          // For the above foreground scanning service to be useful, you need to disable
-          // JobScheduler-based scans (used on Android 8+) and set a fast background scan
-          // cycle that would otherwise be disallowed by the operating system.
-          //
-          mBeaconManager.setEnableScheduledScanJobs(false);
-          mBeaconManager.setBackgroundBetweenScanPeriod(0);
-          mBeaconManager.setBackgroundScanPeriod(1100);
-        }
-
-        bindManager();
-        mInitialized = true;
-    }
+  private void initializeBeaconModule() {
+    bindManager();
+    mInitialized = true;
+  }
 
     @Override
     public void onHostResume() {
         // Activity `onResume`
-        if (!mInitialized) {
+        if (firstSetupCompleted && !mInitialized) {
             initializeBeaconModule();
         }
     }
@@ -123,17 +118,11 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
     @Override
     public void onHostDestroy() {
       // Activity `onDestroy`
-      mInitialized = false;
-      unbindManager();
-      sendEvent(mReactContext, "beaconMonitorDestroyed", null);
-
-      // if (Build.VERSION.SDK_INT > 26) {
-      //   NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
-      //   // notificationManager.cancel(mBeaconManager.getForegroundServiceNotificationId());
-      //   notificationManager.deleteNotificationChannel(NOTIFICATION_CHANNEL_ID);
-      // }
-
-      // mBeaconManager.disableForegroundServiceScanning();
+      if (mInitialized) {
+        mInitialized = false;
+        unbindManager();
+        sendEvent(mReactContext, "beaconMonitorDestroyed", null);
+      }
     }
 
     @Override
