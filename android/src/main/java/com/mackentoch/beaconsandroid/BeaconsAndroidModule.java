@@ -72,7 +72,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
       builder.setContentTitle("Scanning for Assets");
       Class intentClass = getMainActivityClass();
       Intent intent = new Intent(mApplicationContext, intentClass);
-      PendingIntent pendingIntent = PendingIntent.getActivity(mApplicationContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+      PendingIntent pendingIntent = PendingIntent.getActivity(mApplicationContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
       builder.setContentIntent(pendingIntent);
 
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
