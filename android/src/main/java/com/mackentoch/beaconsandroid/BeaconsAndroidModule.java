@@ -318,7 +318,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
             String.valueOf(minor).equals("-1") ? "" : String.valueOf(minor),
             String.valueOf(major).equals("-1") ? "" : String.valueOf(major)
           );
-          mBeaconManager.startMonitoringBeacons(region);
+          mBeaconManager.startMonitoring(region);
           resolve.invoke();
       } catch (Exception e) {
           Log.e(LOG_TAG, "startMonitoring, error: ", e);
@@ -364,7 +364,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
       );
 
       try {
-          mBeaconManager.stopMonitoringBeacons(region);
+          mBeaconManager.stopMonitoring(region);
           resolve.invoke();
       } catch (Exception e) {
           Log.e(LOG_TAG, "stopMonitoring, error: ", e);
